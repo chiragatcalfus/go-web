@@ -1,27 +1,24 @@
-FROM golang:1.22.5 AS base
+# Stage 1 - Build
+FROM golang:1.22.5 AS builder
 
 WORKDIR /app
 
-COPY go.mod .
-
+COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . .
 
-RUN go build -o main .
+# Build with optimizations and static linking
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o main .
+
+# Stage 2 - Minimal final image
+FROM gcr.io/distroless/static
+
+WORKDIR /
+
+COPY --from=builder /app/main /
+COPY --from=builder /app/static /static
 
 EXPOSE 8080
 
-CMD [ "./main" ]
-
-# stage 2 -> distroless
-
-FROM gcr.io/distroless/base
-
-COPY --from=base /app/main /
-
-COPY --from=base /app/static ./static
-
-EXPOSE 8080
-
-CMD [ "./main" ]
+CMD ["/main"]
